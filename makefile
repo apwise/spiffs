@@ -29,6 +29,7 @@ MKDIR ?= mkdir -p
 #
 ###############
 
+H16 ?= 1
 NO_TEST ?= 0
 CFLAGS = $(FLAGS)
 ifeq (1, $(strip $(NO_TEST)))
@@ -46,7 +47,15 @@ CFILES_TEST = main.c \
 CFLAGS += -D_SPIFFS_TEST
 endif
 include files.mk
-INCLUDE_DIRECTIVES = -I./${sourcedir} -I./${sourcedir}/default -I./${sourcedir}/test 
+SRC_DIRS = ./${sourcedir}
+ifeq (1, $(strip $(H16)))
+CFLAGS += -DH16
+SRC_DIRS += ./${sourcedir}/h16
+else
+SRC_DIRS += ./${sourcedir}/default
+endif
+SRC_DIRS += ./${sourcedir}/test
+INCLUDE_DIRECTIVES = $(patsubst %,-I%,$(SRC_DIRS))
 COMPILEROPTIONS = $(INCLUDE_DIRECTIVES)
 
 COMPILEROPTIONS_APP = $(INCLUDE_DIRECTIVES) \
@@ -54,14 +63,14 @@ COMPILEROPTIONS_APP = $(INCLUDE_DIRECTIVES) \
 -Wpointer-arith -Wreturn-type -Wcast-qual -Wwrite-strings -Wswitch \
 -Wshadow -Wcast-align -Wchar-subscripts -Winline -Wnested-externs\
 -Wredundant-decls
-		
+
 ############
 #
 # Tasks
 #
 ############
 
-vpath %.c ${sourcedir} ${sourcedir}/default ${sourcedir}/test
+vpath %.c $(SRC_DIRS)
 
 OBJFILES = $(CFILES:%.c=${builddir}/%.o)
 OBJFILES_TEST = $(CFILES_TEST:%.c=${builddir}/%.o)
@@ -81,24 +90,24 @@ ifeq (1, $(strip $(NO_TEST)))
 endif
 
 
--include $(DEPENDENCIES)	   	
+-include $(DEPENDENCIES)
 
 # compile c files
 $(OBJFILES) : ${builddir}/%.o:%.c
-		@echo "... compile $@"
-		@${CC} $(COMPILEROPTIONS_APP) $(CFLAGS) -g -c -o $@ $<
+	@echo "... compile $@"
+	@${CC} $(COMPILEROPTIONS_APP) $(CFLAGS) -g -c -o $@ $<
 
 $(OBJFILES_TEST) : ${builddir}/%.o:%.c
-		@echo "... compile $@"
-		@${CC} ${COMPILEROPTIONS} $(CFLAGS) -g -c -o $@ $<
+	@echo "... compile $@"
+	@${CC} ${COMPILEROPTIONS} $(CFLAGS) -g -c -o $@ $<
 
 # make dependencies
-#		@echo "... depend $@"; 
+#       @echo "... depend $@"; 
 $(DEPFILES) : ${builddir}/%.d:%.c
-		@rm -f $@; \
-		${CC} $(COMPILEROPTIONS) -M $< > $@.$$$$; \
-		sed 's,\($*\)\.o[ :]*, ${builddir}/\1.o $@ : ,g' < $@.$$$$ > $@; \
-		rm -f $@.$$$$
+	@rm -f $@; \
+	${CC} $(COMPILEROPTIONS) -M $< > $@.$$$$; \
+	sed 's,\($*\)\.o[ :]*, ${builddir}/\1.o $@ : ,g' < $@.$$$$ > $@; \
+	rm -f $@.$$$$
 
 all: mkdirs $(BINARY) 
 
@@ -110,20 +119,20 @@ FILTER ?=
 
 test: $(BINARY)
 ifdef $(FILTER)
-		./build/$(BINARY)
+	./build/$(BINARY)
 else
-		./build/$(BINARY) -f $(FILTER)
+	./build/$(BINARY) -f $(FILTER)
 endif
 
 test_failed: $(BINARY)
-		./build/$(BINARY) _tests_fail
-	
+	./build/$(BINARY) _tests_fail
+
 clean:
 	@echo ... removing build files in ${builddir}
 	@rm -f ${builddir}/*.o
 	@rm -f ${builddir}/*.d
 	@rm -f ${builddir}/*.elf
-	
+
 ONOFF = 1 0
 OFFON = 0 1
 build-all:
@@ -133,28 +142,28 @@ build-all:
 				for cache in $(OFFON); do \
 					for magic in $(OFFON); do \
 						for temporal_cache in $(OFFON); do \
-  						for ix_map in $(OFFON); do \
-  							echo; \
-  							echo ============================================================; \
-  							echo SPIFFS_READ_ONLY=$$rdonly; \
-  							echo SPIFFS_SINGLETON=$$singleton; \
-  							echo SPIFFS_HAL_CALLBACK_EXTRA=$$hal_cb_xtra; \
-  							echo SPIFFS_CACHE, SPIFFS_CACHE_WR=$$cache; \
-  							echo SPIFFS_USE_MAGIC, SPIFFS_USE_MAGIC_LENGTH=$$magic; \
-  							echo SPIFFS_TEMPORAL_FD_CACHE=$$temporal_cache; \
-  							echo SPIFFS_IX_MAP=$$ix_map; \
-  							$(MAKE) clean && $(MAKE) FLAGS="\
-  								-DSPIFFS_HAL_CALLBACK_EXTRA=$$hal_cb_xtra \
-  								-DSPIFFS_SINGLETON=$$singleton \
-  								-DSPIFFS_CACHE=$$cache \
-  								-DSPIFFS_CACHE_WR=$$cache \
-  								-DSPIFFS_READ_ONLY=$$rdonly \
-  								-DSPIFFS_USE_MAGIC=$$magic \
-  								-DSPIFFS_USE_MAGIC_LENGTH=$$magic \
-  								-DSPIFFS_TEMPORAL_FD_CACHE=$$temporal_cache \
-  								-DSPIFFS_IX_MAP=$$ix_map \
-  								" NO_TEST=1; \
-  						done || exit 1; \
+						for ix_map in $(OFFON); do \
+							echo; \
+							echo ============================================================; \
+							echo SPIFFS_READ_ONLY=$$rdonly; \
+							echo SPIFFS_SINGLETON=$$singleton; \
+							echo SPIFFS_HAL_CALLBACK_EXTRA=$$hal_cb_xtra; \
+							echo SPIFFS_CACHE, SPIFFS_CACHE_WR=$$cache; \
+							echo SPIFFS_USE_MAGIC, SPIFFS_USE_MAGIC_LENGTH=$$magic; \
+							echo SPIFFS_TEMPORAL_FD_CACHE=$$temporal_cache; \
+							echo SPIFFS_IX_MAP=$$ix_map; \
+							$(MAKE) clean && $(MAKE) FLAGS="\
+								-DSPIFFS_HAL_CALLBACK_EXTRA=$$hal_cb_xtra \
+								-DSPIFFS_SINGLETON=$$singleton \
+								-DSPIFFS_CACHE=$$cache \
+								-DSPIFFS_CACHE_WR=$$cache \
+								-DSPIFFS_READ_ONLY=$$rdonly \
+								-DSPIFFS_USE_MAGIC=$$magic \
+								-DSPIFFS_USE_MAGIC_LENGTH=$$magic \
+								-DSPIFFS_TEMPORAL_FD_CACHE=$$temporal_cache \
+								-DSPIFFS_IX_MAP=$$ix_map \
+								" NO_TEST=1; \
+						done || exit 1; \
 						done \
 					done \
 				done \
