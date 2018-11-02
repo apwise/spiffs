@@ -207,20 +207,20 @@
 // on the target. This will reduce calculations, flash and memory accesses.
 // Parts of configuration must be defined below instead of at time of mount.
 #ifndef SPIFFS_SINGLETON
-#define SPIFFS_SINGLETON 0
+#define SPIFFS_SINGLETON 1
 #endif
 
 #if SPIFFS_SINGLETON
 // Instead of giving parameters in config struct, singleton build must
 // give parameters in defines below.
 #ifndef SPIFFS_CFG_PHYS_SZ
-#define SPIFFS_CFG_PHYS_SZ(ignore)        (1024*1024*2)
+#define SPIFFS_CFG_PHYS_SZ(ignore)        (1024*1024*15)
 #endif
 #ifndef SPIFFS_CFG_PHYS_ERASE_SZ
 #define SPIFFS_CFG_PHYS_ERASE_SZ(ignore)  (65536)
 #endif
 #ifndef SPIFFS_CFG_PHYS_ADDR
-#define SPIFFS_CFG_PHYS_ADDR(ignore)      (0)
+#define SPIFFS_CFG_PHYS_ADDR(ignore)      (1024*1024*1)
 #endif
 #ifndef SPIFFS_CFG_LOG_PAGE_SZ
 #define SPIFFS_CFG_LOG_PAGE_SZ(ignore)    (256)
@@ -283,7 +283,7 @@
 // directly. If all available descriptors become opened, all cache memory is
 // lost.
 #ifndef SPIFFS_TEMPORAL_FD_CACHE
-#define SPIFFS_TEMPORAL_FD_CACHE              1
+#define SPIFFS_TEMPORAL_FD_CACHE              0
 #endif
 
 // Temporal file cache hit score. Each time a file is opened, all cached files
@@ -308,7 +308,7 @@
 // file is modified in some way. The index buffer is tied to the file
 // descriptor.
 #ifndef SPIFFS_IX_MAP
-#define SPIFFS_IX_MAP                         1
+#define SPIFFS_IX_MAP                         0
 #endif
 
 // By default SPIFFS in some cases relies on the property of NOR flash that bits
@@ -369,5 +369,7 @@ typedef u16_t spiffs_obj_id;
 // hold the largest possible span index on the system -
 // i.e. (spiffs_file_system_size / log_page_size) - 1
 typedef u16_t spiffs_span_ix;
+
+#include "spiffs_h16_types.h"
 
 #endif /* SPIFFS_CONFIG_H_ */

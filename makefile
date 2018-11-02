@@ -49,7 +49,7 @@ endif
 include files.mk
 SRC_DIRS = ./${sourcedir}
 ifeq (1, $(strip $(H16)))
-CFLAGS += -DH16
+CFLAGS += -DH16=1
 SRC_DIRS += ./${sourcedir}/h16
 else
 SRC_DIRS += ./${sourcedir}/default
