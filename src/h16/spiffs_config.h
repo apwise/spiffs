@@ -11,14 +11,16 @@
 // ----------- 8< ------------
 // Following includes are for the linux test build of spiffs
 // These may/should/must be removed/altered/replaced in your target
-#include "params_test.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
 #include <unistd.h>
 #ifdef _SPIFFS_TEST
+#include "params_test.h"
 #include "testrunner.h"
+#else
+#include "spiffs_types.h"
 #endif
 // ----------- >8 ------------
 
@@ -92,7 +94,7 @@
 // Enables/disable memory read caching of nucleus file system operations.
 // If enabled, memory area must be provided for cache in SPIFFS_mount.
 #ifndef  SPIFFS_CACHE
-#define SPIFFS_CACHE                    1
+#define SPIFFS_CACHE                    0
 #endif
 #if SPIFFS_CACHE
 // Enables memory write caching for file descriptors in hydrogen

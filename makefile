@@ -8,6 +8,7 @@ BINARY = linux_spiffs_test
 
 sourcedir = src
 builddir = build
+utildir = util
 
 
 #############
@@ -44,13 +45,14 @@ CFILES_TEST = main.c \
 	test_bugreports.c \
 	testsuites.c \
 	testrunner.c
-CFLAGS += -D_SPIFFS_TEST
+${builddir}/%.o: CFLAGS += -D_SPIFFS_TEST
 endif
 include files.mk
 SRC_DIRS = ./${sourcedir}
 ifeq (1, $(strip $(H16)))
 CFLAGS += -DH16=1
 SRC_DIRS += ./${sourcedir}/h16
+CFILES_UTIL = buildfs.c
 else
 SRC_DIRS += ./${sourcedir}/default
 endif
@@ -81,14 +83,34 @@ ALLOBJFILES += $(OBJFILES) $(OBJFILES_TEST)
 
 DEPENDENCIES = $(DEPFILES) 
 
+ALL_TARGETS = ${builddir}/$(BINARY)
+
+ifneq (1, $(strip $(NO_TEST)))
+ifeq (1, $(strip $(H16)))
+OBJFILES_UTIL = $(CFILES:%.c=${utildir}/%.o) $(CFILES_UTIL:%.c=${utildir}/%.o)
+DEPFILES_UTIL += $(CFILES:%.c=${utildir}/%.d) $(CFILES_UTIL:%.c=${utildir}/%.d)
+${utildir}/%.o: CFLAGS+=-DNO_TEST
+BINARY_UTIL = buildfs
+DEPENDENCIES += $(DEPFILES_UTIL) 
+ALL_TARGETS += ${utildir}/$(BINARY_UTIL)
+endif
+endif
+
+all: mkdirs $(ALL_TARGETS)
+
 # link object files, create binary
-$(BINARY): $(ALLOBJFILES)
+${builddir}/$(BINARY): $(ALLOBJFILES)
 	@echo "... linking"
 	@${CC} $(LINKEROPTIONS) -o ${builddir}/$(BINARY) $(ALLOBJFILES) $(LIBS)
 ifeq (1, $(strip $(NO_TEST)))
 	@echo "size: `du -b ${builddir}/${BINARY} | sed 's/\([0-9]*\).*/\1/g '` bytes"
 endif
 
+ifeq (1, $(strip $(H16)))
+${utildir}/$(BINARY_UTIL): $(OBJFILES_UTIL)
+	@echo "... linking"
+	@${CC} $(LINKEROPTIONS) -o $@ $^ $(LIBS)
+endif
 
 -include $(DEPENDENCIES)
 
@@ -101,18 +123,22 @@ $(OBJFILES_TEST) : ${builddir}/%.o:%.c
 	@echo "... compile $@"
 	@${CC} ${COMPILEROPTIONS} $(CFLAGS) -g -c -o $@ $<
 
+$(OBJFILES_UTIL) : ${utildir}/%.o:%.c
+	@echo "... compile $@"
+	@${CC} ${COMPILEROPTIONS} $(CFLAGS) -g -c -o $@ $<
+
 # make dependencies
 #       @echo "... depend $@"; 
 $(DEPFILES) : ${builddir}/%.d:%.c
+$(DEPFILES_UTIL) : ${utildir}/%.d:%.c
 	@rm -f $@; \
 	${CC} $(COMPILEROPTIONS) -M $< > $@.$$$$; \
 	sed 's,\($*\)\.o[ :]*, ${builddir}/\1.o $@ : ,g' < $@.$$$$ > $@; \
 	rm -f $@.$$$$
 
-all: mkdirs $(BINARY) 
-
 mkdirs:
 	-@${MKDIR} ${builddir}
+	-@${MKDIR} ${utildir}
 	-@${MKDIR} test_data
 
 FILTER ?=
@@ -132,6 +158,9 @@ clean:
 	@rm -f ${builddir}/*.o
 	@rm -f ${builddir}/*.d
 	@rm -f ${builddir}/*.elf
+	@rm -f ${utildir}/*.o
+	@rm -f ${utildir}/*.d
+	@rm -f ${utildir}/*.elf
 
 ONOFF = 1 0
 OFFON = 0 1
