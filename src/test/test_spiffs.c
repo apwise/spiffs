@@ -294,7 +294,7 @@ void dump_page(spiffs *fs, spiffs_page_ix p) {
     spiffs_obj_id obj_id = *((spiffs_obj_id *)&AREA(obj_id_addr));
     // data page
     spiffs_page_header *ph = (spiffs_page_header *)&AREA(addr);
-    printf("DATA %04x:%04x  ", obj_id, ph->span_ix);
+    printf("DATA %04x:%04x  ", obj_id, SPIFFS_GET_SPAN_IX(*ph));
     printf("%s", ((ph->flags & SPIFFS_PH_FLAG_FINAL) == 0) ? "FIN " : "fin ");
     printf("%s", ((ph->flags & SPIFFS_PH_FLAG_DELET) == 0) ? "DEL " : "del ");
     printf("%s", ((ph->flags & SPIFFS_PH_FLAG_INDEX) == 0) ? "IDX " : "idx ");
@@ -303,10 +303,10 @@ void dump_page(spiffs *fs, spiffs_page_ix p) {
     if (obj_id & SPIFFS_OBJ_ID_IX_FLAG) {
       // object index
       printf("OBJ_IX");
-      if (ph->span_ix == 0) {
+      if (SPIFFS_GET_SPAN_IX(*ph) == 0) {
         printf("_HDR  ");
         spiffs_page_object_ix_header *oix_hdr = (spiffs_page_object_ix_header *)&AREA(addr);
-        printf("'%s'  %i bytes  type:%02x", oix_hdr->name, oix_hdr->size, oix_hdr->type);
+        printf("'%s'  %i bytes  type:%02x", oix_hdr->name, SPIFFS_GET_SIZE(*oix_hdr), oix_hdr->type);
       }
     } else {
       // data page

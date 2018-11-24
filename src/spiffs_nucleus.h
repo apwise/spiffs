@@ -337,7 +337,7 @@
     if (((ph).flags & SPIFFS_PH_FLAG_FINAL) != 0) return SPIFFS_ERR_NOT_FINALIZED; \
     if (((ph).flags & SPIFFS_PH_FLAG_INDEX) != 0) return SPIFFS_ERR_NOT_INDEX; \
     if (((objid) & SPIFFS_OBJ_ID_IX_FLAG) == 0) return SPIFFS_ERR_NOT_INDEX; \
-    if ((ph).span_ix != (spix)) return SPIFFS_ERR_INDEX_SPAN_MISMATCH;
+    if (SPIFFS_GET_SPAN_IX(ph) != (spix)) return SPIFFS_ERR_INDEX_SPAN_MISMATCH;
     //if ((spix) == 0 && ((ph).flags & SPIFFS_PH_FLAG_IXDELE) == 0) return SPIFFS_ERR_DELETED;
 
 #define SPIFFS_VALIDATE_DATA(ph, objid, spix) \
@@ -346,7 +346,7 @@
     if (((ph).flags & SPIFFS_PH_FLAG_FINAL) != 0) return SPIFFS_ERR_NOT_FINALIZED; \
     if (((ph).flags & SPIFFS_PH_FLAG_INDEX) == 0) return SPIFFS_ERR_IS_INDEX; \
     if ((objid) & SPIFFS_OBJ_ID_IX_FLAG) return SPIFFS_ERR_IS_INDEX; \
-    if ((ph).span_ix != (spix)) return SPIFFS_ERR_DATA_SPAN_MISMATCH;
+    if (SPIFFS_GET_SPAN_IX(ph) != (spix)) return SPIFFS_ERR_DATA_SPAN_MISMATCH;
 
 
 // check id, only visit matching objec ids
@@ -485,9 +485,27 @@ typedef struct SPIFFS_PACKED {
   spiffs_obj_id obj_id;
   // object span index
   spiffs_span_ix span_ix;
+#if (H16)
+  u8_t _align; // Put flags in lower byte of a word
+#endif
   // flags
   u8_t flags;
 } spiffs_page_header;
+
+#if (H16)
+static inline u16_t spiffs_word_swap_bytes(u16_t w) { return (w >> 8) | (w << 8); }
+#define SPIFFS_GET_OBJ_ID(ph) spiffs_word_swap_bytes((ph).obj_id)
+#define SPIFFS_PUT_OBJ_ID(ph,id) (ph).obj_id = spiffs_word_swap_bytes(id)
+#define SPIFFS_GET_SPAN_IX(ph) spiffs_word_swap_bytes((ph).span_ix)
+#define SPIFFS_PUT_SPAN_IX(ph,ix) (ph).span_ix = spiffs_word_swap_bytes(ix)
+#define SPIFFS_SET_ALIGN(ph) (ph)._align = 0xff
+#else
+#define SPIFFS_GET_OBJ_ID(ph) (ph).obj_id
+#define SPIFFS_PUT_OBJ_ID(ph,id) (ph).obj_id = (id)
+#define SPIFFS_GET_SPAN_IX(ph) (ph).span_ix
+#define SPIFFS_PUT_SPAN_IX(ph,ix) (ph).span_ix = (ix)
+#define SPIFFS_SET_ALIGN(ph)
+#endif
 
 // object index header page header
 typedef struct SPIFFS_PACKED
@@ -497,12 +515,22 @@ typedef struct SPIFFS_PACKED
 {
   // common page header
   spiffs_page_header p_hdr;
+#if (H16)
+  u8_t _align1; // Put type in lower byte of a word
+  // type of object
+  spiffs_obj_type type;
   // alignment
-  u8_t _align[4 - ((sizeof(spiffs_page_header)&3)==0 ? 4 : (sizeof(spiffs_page_header)&3))];
+  u8_t _align2[4 - (((sizeof(spiffs_page_header)+1+sizeof(spiffs_obj_type))&3)==0 ? 4 : ((sizeof(spiffs_page_header)+1+sizeof(spiffs_obj_type))&3))];
+  // size of object
+  u32_t size;
+#else
+  // alignment
+  u8_t _align2[4 - ((sizeof(spiffs_page_header)&3)==0 ? 4 : (sizeof(spiffs_page_header)&3))];
   // size of object
   u32_t size;
   // type of object
   spiffs_obj_type type;
+#endif
   // name of object
   u8_t name[SPIFFS_OBJ_NAME_LEN];
 #if SPIFFS_OBJ_META_LEN
@@ -510,6 +538,27 @@ typedef struct SPIFFS_PACKED
   u8_t meta[SPIFFS_OBJ_META_LEN];
 #endif
 } spiffs_page_object_ix_header;
+
+#if (H16)
+// 31 30 29 28 27 26 25 24 | 23 22 21 20 19 18 17 16 | 15 14 13 12 11 10 09 08 | 07 06 05 04 03 02 01 00
+// 31 30 29 28 27 26 25 24 | 23 22 21 20 19 18 17 16 | 00 15 14 13 12 11 10 09 | 08 07 06 05 04 03 02 01
+// 08 07 06 05 04 03 02 01 | 00 15 14 12 12 11 10 09 | 23 22 21 20 19 18 17 16 | 31 30 29 28 27 26 25 24
+static inline u32_t spiffs_long_to_dbl(u32_t w) { return (w >> 24) | ((w >> 8) & 0x0000ff00) | ((w & 0x0000fe00) << 7) | (w << 23); }
+static inline u32_t spiffs_dbl_to_long(u32_t w) { return (w >> 23) | ((w >> 7) & 0x0000fe00) | ((w & 0x0000ff00) << 8) | (w << 24); }
+#define SPIFFS_SET_ALIGN1(poixh) (poixh)._align1 = 0xff
+#define SPIFFS_GET_SIZE(poixh) spiffs_dbl_to_long((poixh).size)
+#define SPIFFS_PUT_SIZE(poixh,sz) (poixh).size = spiffs_long_to_dbl(sz)
+#define SPIFFS_GET_NAME(poixh,nm) strncpy((char *)(nm), (const char *)(poixh).name, SPIFFS_OBJ_NAME_LEN)
+#define SPIFFS_PUT_NAME(poixh,nm) strncpy((char *)(poixh).name, (const char *) (nm), SPIFFS_OBJ_NAME_LEN)
+#define SPIFFS_CMP_NAME(poixh,nm) (strncmp((const char *)(poixh).name, (const char *) (nm), SPIFFS_OBJ_NAME_LEN) == 0)
+#else
+#define SPIFFS_SET_ALIGN1(poixh)
+#define SPIFFS_GET_SIZE(poixh) (poixh).size
+#define SPIFFS_PUT_SIZE(poixh,sz) (poixh).size = (sz)
+#define SPIFFS_GET_NAME(poixh,nm) strncpy((char *)(nm), (const char *)(poixh).name, SPIFFS_OBJ_NAME_LEN)
+#define SPIFFS_PUT_NAME(poixh,nm) strncpy((char *)(poixh).name, (const char *) (nm), SPIFFS_OBJ_NAME_LEN)
+#define SPIFFS_CMP_NAME(poixh,nm) (strncmp((const char *)(poixh).name, (const char *) (nm), SPIFFS_OBJ_NAME_LEN) == 0)
+#endif
 
 // object index page header
 typedef struct SPIFFS_PACKED {

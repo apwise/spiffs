@@ -511,10 +511,10 @@ static s32_t spiffs_obj_lu_find_id_and_span_v(
   res = _spiffs_rd(fs, 0, SPIFFS_OP_T_OBJ_LU2 | SPIFFS_OP_C_READ,
       SPIFFS_PAGE_TO_PADDR(fs, pix), sizeof(spiffs_page_header), (u8_t *)&ph);
   SPIFFS_CHECK_RES(res);
-  if (ph.obj_id == obj_id &&
-      ph.span_ix == *((spiffs_span_ix*)user_var_p) &&
+  if (SPIFFS_GET_OBJ_ID(ph) == obj_id &&
+      SPIFFS_GET_SPAN_IX(ph) == *((spiffs_span_ix*)user_var_p) &&
       (ph.flags & (SPIFFS_PH_FLAG_FINAL | SPIFFS_PH_FLAG_DELET | SPIFFS_PH_FLAG_USED)) == SPIFFS_PH_FLAG_DELET &&
-      !((obj_id & SPIFFS_OBJ_ID_IX_FLAG) && (ph.flags & SPIFFS_PH_FLAG_IXDELE) == 0 && ph.span_ix == 0) &&
+      !((obj_id & SPIFFS_OBJ_ID_IX_FLAG) && (ph.flags & SPIFFS_PH_FLAG_IXDELE) == 0 && SPIFFS_GET_SPAN_IX(ph) == 0) &&
       (user_const_p == 0 || *((const spiffs_page_ix*)user_const_p) != pix)) {
     return SPIFFS_OK;
   } else {
@@ -679,13 +679,13 @@ static s32_t spiffs_populate_ix_map_v(
   res = _spiffs_rd(fs, SPIFFS_OP_T_OBJ_LU2 | SPIFFS_OP_C_READ,
       0, SPIFFS_PAGE_TO_PADDR(fs, pix), sizeof(spiffs_page_object_ix), (u8_t *)objix);
   SPIFFS_CHECK_RES(res);
-  SPIFFS_VALIDATE_OBJIX(objix->p_hdr, obj_id, objix->p_hdr.span_ix);
+  SPIFFS_VALIDATE_OBJIX(objix->p_hdr, obj_id, SPIFFS_GET_SPAN_IX(objix->p_hdr));
 
   // check if hdr is ok, and if objix range overlap with ix map range
   if ((objix->p_hdr.flags & (SPIFFS_PH_FLAG_DELET | SPIFFS_PH_FLAG_FINAL | SPIFFS_PH_FLAG_IXDELE)) ==
       (SPIFFS_PH_FLAG_DELET | SPIFFS_PH_FLAG_IXDELE) &&
-      objix->p_hdr.span_ix >= state->map_objix_start_spix &&
-      objix->p_hdr.span_ix <= state->map_objix_end_spix) {
+      SPIFFS_GET_SPAN_IX(objix->p_hdr) >= state->map_objix_start_spix &&
+      SPIFFS_GET_SPAN_IX(objix->p_hdr) <= state->map_objix_end_spix) {
     // ok, load rest of object index
     res = _spiffs_rd(fs, SPIFFS_OP_T_OBJ_LU2 | SPIFFS_OP_C_READ,
         0, SPIFFS_PAGE_TO_PADDR(fs, pix) + sizeof(spiffs_page_object_ix),
@@ -693,7 +693,7 @@ static s32_t spiffs_populate_ix_map_v(
         (u8_t *)objix + sizeof(spiffs_page_object_ix));
     SPIFFS_CHECK_RES(res);
 
-    spiffs_update_ix_map(fs, state->fd, objix->p_hdr.span_ix, objix);
+    spiffs_update_ix_map(fs, state->fd, SPIFFS_GET_SPAN_IX(objix->p_hdr), objix);
 
     state->remaining_objix_pages_to_visit--;
     SPIFFS_DBG("map "_SPIPRIid" ("_SPIPRIsp"--"_SPIPRIsp") remaining objix pages "_SPIPRIi"\n",
@@ -939,12 +939,14 @@ s32_t spiffs_object_create(
   fs->stats_p_allocated++;
 
   // write empty object index page
-  oix_hdr.p_hdr.obj_id = obj_id;
-  oix_hdr.p_hdr.span_ix = 0;
+  SPIFFS_PUT_OBJ_ID(oix_hdr.p_hdr, obj_id);
+  SPIFFS_PUT_SPAN_IX(oix_hdr.p_hdr, 0);
+  SPIFFS_SET_ALIGN(oix_hdr.p_hdr);
   oix_hdr.p_hdr.flags = 0xff & ~(SPIFFS_PH_FLAG_FINAL | SPIFFS_PH_FLAG_INDEX | SPIFFS_PH_FLAG_USED);
+  SPIFFS_SET_ALIGN1(oix_hdr);
   oix_hdr.type = type;
-  oix_hdr.size = SPIFFS_UNDEFINED_LEN; // keep ones so we can update later without wasting this page
-  strncpy((char*)oix_hdr.name, (const char*)name, SPIFFS_OBJ_NAME_LEN);
+  SPIFFS_PUT_SIZE(oix_hdr,SPIFFS_UNDEFINED_LEN); // keep ones so we can update later without wasting this page
+  SPIFFS_PUT_NAME(oix_hdr,name);
 #if SPIFFS_OBJ_META_LEN
   if (meta) {
     _SPIFFS_MEMCPY(oix_hdr.meta, meta, SPIFFS_OBJ_META_LEN);
@@ -1007,7 +1009,7 @@ s32_t spiffs_object_update_index_hdr(
 
   // change name
   if (name) {
-    strncpy((char*)objix_hdr->name, (const char*)name, SPIFFS_OBJ_NAME_LEN);
+    SPIFFS_PUT_NAME(*objix_hdr,name);
   }
 #if SPIFFS_OBJ_META_LEN
   if (meta) {
@@ -1017,7 +1019,7 @@ s32_t spiffs_object_update_index_hdr(
   (void) meta;
 #endif
   if (size) {
-    objix_hdr->size = size;
+    SPIFFS_PUT_SIZE(*objix_hdr,size);
   }
 
   // move and update page
@@ -1029,8 +1031,9 @@ s32_t spiffs_object_update_index_hdr(
     }
     // callback on object index update
     spiffs_cb_object_event(fs, (spiffs_page_object_ix *)objix_hdr,
-        new_objix_hdr_data ? SPIFFS_EV_IX_UPD : SPIFFS_EV_IX_UPD_HDR,
-            obj_id, objix_hdr->p_hdr.span_ix, new_objix_hdr_pix, objix_hdr->size);
+                           ((new_objix_hdr_data) ? SPIFFS_EV_IX_UPD : SPIFFS_EV_IX_UPD_HDR),
+                           obj_id, SPIFFS_GET_SPAN_IX(objix_hdr->p_hdr), new_objix_hdr_pix,
+                           SPIFFS_GET_SIZE(*objix_hdr));
     if (fd) fd->objix_hdr_pix = new_objix_hdr_pix; // if this is not in the registered cluster
   }
 
@@ -1192,7 +1195,7 @@ s32_t spiffs_object_open_by_page(
 
   fd->fs = fs;
   fd->objix_hdr_pix = pix;
-  fd->size = oix_hdr.size;
+  fd->size = SPIFFS_GET_SIZE(oix_hdr);
   fd->offset = 0;
   fd->cursor_objix_pix = pix;
   fd->cursor_objix_spix = 0;
@@ -1255,7 +1258,7 @@ s32_t spiffs_object_append(spiffs_fd *fd, u32_t offset, u8_t *data, u32_t len) {
             cur_objix_pix, prev_objix_spix, written);
         if (prev_objix_spix == 0) {
           // this is an update to object index header page
-          objix_hdr->size = offset+written;
+          SPIFFS_PUT_SIZE(*objix_hdr, offset+written);
           if (offset == 0) {
             // was an empty object, update same page (size was 0xffffffff)
             res = spiffs_page_index_check(fs, fd, cur_objix_pix, 0);
@@ -1280,7 +1283,7 @@ s32_t spiffs_object_append(spiffs_fd *fd, u32_t offset, u8_t *data, u32_t len) {
               fd->file_nbr, SPIFFS_PAGE_TO_PADDR(fs, cur_objix_pix), SPIFFS_CFG_LOG_PAGE_SZ(fs), fs->work);
           SPIFFS_CHECK_RES(res);
           spiffs_cb_object_event(fs, (spiffs_page_object_ix *)fs->work,
-              SPIFFS_EV_IX_UPD,fd->obj_id, objix->p_hdr.span_ix, cur_objix_pix, 0);
+                                 SPIFFS_EV_IX_UPD,fd->obj_id, SPIFFS_GET_SPAN_IX(objix->p_hdr), cur_objix_pix, 0);
           // update length in object index header page
           res = spiffs_object_update_index_hdr(fs, fd, fd->obj_id,
               fd->objix_hdr_pix, 0, 0, 0, offset+written, &new_objix_hdr_page);
@@ -1304,8 +1307,9 @@ s32_t spiffs_object_append(spiffs_fd *fd, u32_t offset, u8_t *data, u32_t len) {
         spiffs_span_ix len_objix_spix = SPIFFS_OBJ_IX_ENTRY_SPAN_IX(fs, (fd->size-1)/SPIFFS_DATA_PAGE_SIZE(fs));
         // on subsequent passes, create a new object index page
         if (written > 0 || cur_objix_spix > len_objix_spix) {
-          p_hdr.obj_id = fd->obj_id | SPIFFS_OBJ_ID_IX_FLAG;
-          p_hdr.span_ix = cur_objix_spix;
+          SPIFFS_PUT_OBJ_ID(p_hdr, fd->obj_id | SPIFFS_OBJ_ID_IX_FLAG);
+          SPIFFS_PUT_SPAN_IX(p_hdr, cur_objix_spix);
+          SPIFFS_SET_ALIGN(p_hdr);
           p_hdr.flags = 0xff & ~(SPIFFS_PH_FLAG_FINAL | SPIFFS_PH_FLAG_INDEX);
           res = spiffs_page_allocate_data(fs, fd->obj_id | SPIFFS_OBJ_ID_IX_FLAG,
               &p_hdr, 0, 0, 0, 1, &cur_objix_pix);
@@ -1346,8 +1350,9 @@ s32_t spiffs_object_append(spiffs_fd *fd, u32_t offset, u8_t *data, u32_t len) {
     u32_t to_write = MIN(len-written, SPIFFS_DATA_PAGE_SIZE(fs) - page_offs);
     if (page_offs == 0) {
       // at beginning of a page, allocate and write a new page of data
-      p_hdr.obj_id = fd->obj_id & ~SPIFFS_OBJ_ID_IX_FLAG;
-      p_hdr.span_ix = data_spix;
+      SPIFFS_PUT_OBJ_ID(p_hdr, fd->obj_id & ~SPIFFS_OBJ_ID_IX_FLAG);
+      SPIFFS_PUT_SPAN_IX(p_hdr, data_spix);
+      SPIFFS_SET_ALIGN(p_hdr);
       p_hdr.flags = 0xff & ~(SPIFFS_PH_FLAG_FINAL);  // finalize immediately
       res = spiffs_page_allocate_data(fs, fd->obj_id & ~SPIFFS_OBJ_ID_IX_FLAG,
           &p_hdr, &data[written], to_write, page_offs, 1, &data_page);
@@ -1380,7 +1385,7 @@ s32_t spiffs_object_append(spiffs_fd *fd, u32_t offset, u8_t *data, u32_t len) {
       ((spiffs_page_ix*)((u8_t *)objix_hdr + sizeof(spiffs_page_object_ix_header)))[data_spix] = data_page;
       SPIFFS_DBG("append: "_SPIPRIid" wrote page "_SPIPRIpg" to objix_hdr entry "_SPIPRIsp" in mem\n", fd->obj_id
           , data_page, data_spix);
-      objix_hdr->size = offset+written;
+      SPIFFS_PUT_SIZE(*objix_hdr,offset+written);
     } else {
       // update object index page
       ((spiffs_page_ix*)((u8_t *)objix + sizeof(spiffs_page_object_ix)))[SPIFFS_OBJ_IX_ENTRY(fs, data_spix)] = data_page;
@@ -1414,7 +1419,7 @@ s32_t spiffs_object_append(spiffs_fd *fd, u32_t offset, u8_t *data, u32_t len) {
         fd->file_nbr, SPIFFS_PAGE_TO_PADDR(fs, cur_objix_pix), SPIFFS_CFG_LOG_PAGE_SZ(fs), fs->work);
     SPIFFS_CHECK_RES(res2);
     spiffs_cb_object_event(fs, (spiffs_page_object_ix *)fs->work,
-        SPIFFS_EV_IX_UPD, fd->obj_id, objix->p_hdr.span_ix, cur_objix_pix, 0);
+                           SPIFFS_EV_IX_UPD, fd->obj_id, SPIFFS_GET_SPAN_IX(objix->p_hdr), cur_objix_pix, 0);
 
     // update size in object header index page
     res2 = spiffs_object_update_index_hdr(fs, fd, fd->obj_id,
@@ -1426,7 +1431,7 @@ s32_t spiffs_object_append(spiffs_fd *fd, u32_t offset, u8_t *data, u32_t len) {
     // wrote within object index header page
     if (offset == 0) {
       // wrote to empty object - simply update size and write whole page
-      objix_hdr->size = offset+written;
+      SPIFFS_PUT_SIZE(*objix_hdr,offset+written);
       SPIFFS_DBG("append: "_SPIPRIid" store fresh objix_hdr page, "_SPIPRIpg":"_SPIPRIsp", written "_SPIPRIi"\n", fd->obj_id
           , cur_objix_pix, cur_objix_spix, written);
 
@@ -1438,7 +1443,7 @@ s32_t spiffs_object_append(spiffs_fd *fd, u32_t offset, u8_t *data, u32_t len) {
       SPIFFS_CHECK_RES(res2);
       // callback on object index update
       spiffs_cb_object_event(fs, (spiffs_page_object_ix *)fs->work,
-          SPIFFS_EV_IX_UPD_HDR, fd->obj_id, objix_hdr->p_hdr.span_ix, cur_objix_pix, objix_hdr->size);
+                             SPIFFS_EV_IX_UPD_HDR, fd->obj_id, SPIFFS_GET_SPAN_IX(objix_hdr->p_hdr), cur_objix_pix, SPIFFS_GET_SIZE(*objix_hdr));
     } else {
       // modifying object index header page, update size and make new copy
       res2 = spiffs_object_update_index_hdr(fs, fd, fd->obj_id,
@@ -1506,7 +1511,7 @@ s32_t spiffs_object_modify(spiffs_fd *fd, u32_t offset, u8_t *data, u32_t len) {
           SPIFFS_DBG("modify: store previous modified objix page, "_SPIPRIid":"_SPIPRIsp", written "_SPIPRIi"\n", new_objix_pix, objix->p_hdr.span_ix, written);
           SPIFFS_CHECK_RES(res);
           spiffs_cb_object_event(fs, (spiffs_page_object_ix *)objix,
-              SPIFFS_EV_IX_UPD, fd->obj_id, objix->p_hdr.span_ix, new_objix_pix, 0);
+                                 SPIFFS_EV_IX_UPD, fd->obj_id, SPIFFS_GET_SPAN_IX(objix->p_hdr), new_objix_pix, 0);
         }
       }
 
@@ -1552,8 +1557,9 @@ s32_t spiffs_object_modify(spiffs_fd *fd, u32_t offset, u8_t *data, u32_t len) {
       orig_data_pix = ((spiffs_page_ix*)((u8_t *)objix + sizeof(spiffs_page_object_ix)))[SPIFFS_OBJ_IX_ENTRY(fs, data_spix)];
     }
 
-    p_hdr.obj_id = fd->obj_id & ~SPIFFS_OBJ_ID_IX_FLAG;
-    p_hdr.span_ix = data_spix;
+    SPIFFS_PUT_OBJ_ID(p_hdr,fd->obj_id & ~SPIFFS_OBJ_ID_IX_FLAG);
+    SPIFFS_PUT_SPAN_IX(p_hdr, data_spix);
+    SPIFFS_SET_ALIGN(p_hdr);
     p_hdr.flags = 0xff;
     if (page_offs == 0 && to_write == SPIFFS_DATA_PAGE_SIZE(fs)) {
       // a full page, allocate and write a new page of data
@@ -1644,7 +1650,7 @@ s32_t spiffs_object_modify(spiffs_fd *fd, u32_t offset, u8_t *data, u32_t len) {
     fd->cursor_objix_spix = cur_objix_spix;
     SPIFFS_CHECK_RES(res2);
     spiffs_cb_object_event(fs, (spiffs_page_object_ix *)objix,
-        SPIFFS_EV_IX_UPD, fd->obj_id, objix->p_hdr.span_ix, new_objix_pix, 0);
+                           SPIFFS_EV_IX_UPD, fd->obj_id, SPIFFS_GET_SPAN_IX(objix->p_hdr), new_objix_pix, 0);
 
   } else {
     // wrote within object index header page
@@ -1676,10 +1682,10 @@ static s32_t spiffs_object_find_object_index_header_by_name_v(
   res = _spiffs_rd(fs, SPIFFS_OP_T_OBJ_LU2 | SPIFFS_OP_C_READ,
       0, SPIFFS_PAGE_TO_PADDR(fs, pix), sizeof(spiffs_page_object_ix_header), (u8_t *)&objix_hdr);
   SPIFFS_CHECK_RES(res);
-  if (objix_hdr.p_hdr.span_ix == 0 &&
+  if (SPIFFS_GET_SPAN_IX(objix_hdr.p_hdr) == 0 &&
       (objix_hdr.p_hdr.flags & (SPIFFS_PH_FLAG_DELET | SPIFFS_PH_FLAG_FINAL | SPIFFS_PH_FLAG_IXDELE)) ==
           (SPIFFS_PH_FLAG_DELET | SPIFFS_PH_FLAG_IXDELE)) {
-    if (strcmp((const char*)user_const_p, (char*)objix_hdr.name) == 0) {
+    if (SPIFFS_CMP_NAME(objix_hdr, user_const_p)) {
       return SPIFFS_OK;
     }
   }
@@ -1778,7 +1784,7 @@ s32_t spiffs_object_truncate(
         res = spiffs_page_delete(fs, objix_pix);
         SPIFFS_CHECK_RES(res);
         spiffs_cb_object_event(fs, (spiffs_page_object_ix *)0,
-            SPIFFS_EV_IX_DEL, fd->obj_id, objix->p_hdr.span_ix, objix_pix, 0);
+                               SPIFFS_EV_IX_DEL, fd->obj_id, SPIFFS_GET_SPAN_IX(objix->p_hdr), objix_pix, 0);
         if (prev_objix_spix > 0) {
           // Update object index header page, unless we totally want to remove the file.
           // If fully removing, we're not keeping consistency as good as when storing the header between chunks,
@@ -1864,8 +1870,9 @@ s32_t spiffs_object_truncate(
       res = spiffs_page_data_check(fs, fd, data_pix, data_spix);
       if (res != SPIFFS_OK) break;
 
-      p_hdr.obj_id = fd->obj_id & ~SPIFFS_OBJ_ID_IX_FLAG;
-      p_hdr.span_ix = data_spix;
+      SPIFFS_PUT_OBJ_ID(p_hdr, fd->obj_id & ~SPIFFS_OBJ_ID_IX_FLAG);
+      SPIFFS_PUT_SPAN_IX(p_hdr, data_spix);
+      SPIFFS_SET_ALIGN(p_hdr);
       p_hdr.flags = 0xff;
       // allocate new page and copy unmodified data
       res = spiffs_page_allocate_data(fs, fd->obj_id & ~SPIFFS_OBJ_ID_IX_FLAG,
@@ -1947,7 +1954,7 @@ s32_t spiffs_object_truncate(
     res = spiffs_page_move(fs, fd->file_nbr, (u8_t*)objix_hdr, fd->obj_id, 0, objix_pix, &new_objix_pix);
     SPIFFS_CHECK_RES(res);
     spiffs_cb_object_event(fs, (spiffs_page_object_ix *)objix_hdr,
-        SPIFFS_EV_IX_UPD, fd->obj_id, objix->p_hdr.span_ix, new_objix_pix, 0);
+                           SPIFFS_EV_IX_UPD, fd->obj_id, SPIFFS_GET_SPAN_IX(objix->p_hdr), new_objix_pix, 0);
     SPIFFS_DBG("truncate: store modified objix page, "_SPIPRIpg":"_SPIPRIsp"\n", new_objix_pix, cur_objix_spix);
     fd->cursor_objix_pix = new_objix_pix;
     fd->cursor_objix_spix = cur_objix_spix;
@@ -2077,10 +2084,10 @@ static s32_t spiffs_obj_lu_find_free_obj_id_bitmap_v(spiffs *fs, spiffs_obj_id i
       res = _spiffs_rd(fs, SPIFFS_OP_T_OBJ_LU2 | SPIFFS_OP_C_READ,
           0, SPIFFS_PAGE_TO_PADDR(fs, pix), sizeof(spiffs_page_object_ix_header), (u8_t *)&objix_hdr);
       SPIFFS_CHECK_RES(res);
-      if (objix_hdr.p_hdr.span_ix == 0 &&
+      if (SPIFFS_GET_SPAN_IX(objix_hdr.p_hdr) == 0 &&
           (objix_hdr.p_hdr.flags & (SPIFFS_PH_FLAG_DELET | SPIFFS_PH_FLAG_FINAL | SPIFFS_PH_FLAG_IXDELE)) ==
               (SPIFFS_PH_FLAG_DELET | SPIFFS_PH_FLAG_IXDELE)) {
-        if (strcmp((const char*)user_const_p, (char*)objix_hdr.name) == 0) {
+        if (SPIFFS_CMP_NAME(objix_hdr,user_const_p)) {
           return SPIFFS_ERR_CONFLICTING_NAME;
         }
       }
@@ -2106,11 +2113,11 @@ static s32_t spiffs_obj_lu_find_free_obj_id_compact_v(spiffs *fs, spiffs_obj_id 
 
     res = _spiffs_rd(fs, SPIFFS_OP_T_OBJ_LU2 | SPIFFS_OP_C_READ,
         0, SPIFFS_OBJ_LOOKUP_ENTRY_TO_PADDR(fs, bix, ix_entry), sizeof(spiffs_page_object_ix_header), (u8_t*)&objix_hdr);
-    if (res == SPIFFS_OK && objix_hdr.p_hdr.span_ix == 0 &&
+    if (res == SPIFFS_OK && SPIFFS_GET_SPAN_IX(objix_hdr.p_hdr) == 0 &&
         ((objix_hdr.p_hdr.flags & (SPIFFS_PH_FLAG_INDEX | SPIFFS_PH_FLAG_FINAL | SPIFFS_PH_FLAG_DELET)) ==
             (SPIFFS_PH_FLAG_DELET))) {
       // ok object look up entry
-      if (state->conflicting_name && strcmp((const char *)state->conflicting_name, (char *)objix_hdr.name) == 0) {
+      if (state->conflicting_name && SPIFFS_CMP_NAME(objix_hdr, state->conflicting_name)) {
         return SPIFFS_ERR_CONFLICTING_NAME;
       }
 

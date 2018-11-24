@@ -740,9 +740,9 @@ static s32_t spiffs_stat_pix(spiffs *fs, spiffs_page_ix pix, spiffs_file fh, spi
 
   s->obj_id = obj_id & ~SPIFFS_OBJ_ID_IX_FLAG;
   s->type = objix_hdr.type;
-  s->size = objix_hdr.size == SPIFFS_UNDEFINED_LEN ? 0 : objix_hdr.size;
+  s->size = SPIFFS_GET_SIZE(objix_hdr) == SPIFFS_UNDEFINED_LEN ? 0 : SPIFFS_GET_SIZE(objix_hdr);
   s->pix = pix;
-  strncpy((char *)s->name, (char *)objix_hdr.name, SPIFFS_OBJ_NAME_LEN);
+  SPIFFS_GET_NAME(objix_hdr, s->name);
 #if SPIFFS_OBJ_META_LEN
   _SPIFFS_MEMCPY(s->meta, objix_hdr.meta, SPIFFS_OBJ_META_LEN);
 #endif
@@ -1037,14 +1037,14 @@ static s32_t spiffs_read_dir_v(
       0, SPIFFS_PAGE_TO_PADDR(fs, pix), sizeof(spiffs_page_object_ix_header), (u8_t *)&objix_hdr);
   if (res != SPIFFS_OK) return res;
   if ((obj_id & SPIFFS_OBJ_ID_IX_FLAG) &&
-      objix_hdr.p_hdr.span_ix == 0 &&
+      SPIFFS_GET_SPAN_IX(objix_hdr.p_hdr) == 0 &&
       (objix_hdr.p_hdr.flags & (SPIFFS_PH_FLAG_DELET | SPIFFS_PH_FLAG_FINAL | SPIFFS_PH_FLAG_IXDELE)) ==
           (SPIFFS_PH_FLAG_DELET | SPIFFS_PH_FLAG_IXDELE)) {
     struct spiffs_dirent *e = (struct spiffs_dirent*)user_var_p;
     e->obj_id = obj_id;
-    strcpy((char *)e->name, (char *)objix_hdr.name);
+    SPIFFS_GET_NAME(objix_hdr,e->name);
     e->type = objix_hdr.type;
-    e->size = objix_hdr.size == SPIFFS_UNDEFINED_LEN ? 0 : objix_hdr.size;
+    e->size = SPIFFS_GET_SIZE(objix_hdr) == SPIFFS_UNDEFINED_LEN ? 0 : SPIFFS_GET_SIZE(objix_hdr);
     e->pix = pix;
 #if SPIFFS_OBJ_META_LEN
     _SPIFFS_MEMCPY(e->meta, objix_hdr.meta, SPIFFS_OBJ_META_LEN);

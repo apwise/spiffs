@@ -232,7 +232,7 @@ int main(int argc, char **argv)
   
   ret = dir_to_fs("tdir");
   if (ret == 0) {
-    ret = write_fs("flash");
+    ret = write_fs("flash.img");
   }
 
   if (flash) {

@@ -439,7 +439,7 @@ s32_t spiffs_gc_clean(spiffs *fs, spiffs_block_ix bix) {
                 0, SPIFFS_PAGE_TO_PADDR(fs, cur_pix), sizeof(spiffs_page_header), (u8_t*)&p_hdr);
             SPIFFS_CHECK_RES(res);
             SPIFFS_GC_DBG("gc_clean: MOVE_DATA found data page "_SPIPRIid":"_SPIPRIsp" @ "_SPIPRIpg"\n", gc.cur_obj_id, p_hdr.span_ix, cur_pix);
-            if (SPIFFS_OBJ_IX_ENTRY_SPAN_IX(fs, p_hdr.span_ix) != gc.cur_objix_spix) {
+            if (SPIFFS_OBJ_IX_ENTRY_SPAN_IX(fs, SPIFFS_GET_SPAN_IX(p_hdr)) != gc.cur_objix_spix) {
               SPIFFS_GC_DBG("gc_clean: MOVE_DATA no objix spix match, take in another run\n");
             } else {
               spiffs_page_ix new_data_pix;
@@ -465,11 +465,11 @@ s32_t spiffs_gc_clean(spiffs *fs, spiffs_block_ix bix) {
               // update memory representation of object index page with new data page
               if (gc.cur_objix_spix == 0) {
                 // update object index header page
-                ((spiffs_page_ix*)((u8_t *)objix_hdr + sizeof(spiffs_page_object_ix_header)))[p_hdr.span_ix] = new_data_pix;
+                ((spiffs_page_ix*)((u8_t *)objix_hdr + sizeof(spiffs_page_object_ix_header)))[SPIFFS_GET_SPAN_IX(p_hdr)] = new_data_pix;
                 SPIFFS_GC_DBG("gc_clean: MOVE_DATA wrote page "_SPIPRIpg" to objix_hdr entry "_SPIPRIsp" in mem\n", new_data_pix, (spiffs_span_ix)SPIFFS_OBJ_IX_ENTRY(fs, p_hdr.span_ix));
               } else {
                 // update object index page
-                ((spiffs_page_ix*)((u8_t *)objix + sizeof(spiffs_page_object_ix)))[SPIFFS_OBJ_IX_ENTRY(fs, p_hdr.span_ix)] = new_data_pix;
+                ((spiffs_page_ix*)((u8_t *)objix + sizeof(spiffs_page_object_ix)))[SPIFFS_OBJ_IX_ENTRY(fs, SPIFFS_GET_SPAN_IX(p_hdr))] = new_data_pix;
                 SPIFFS_GC_DBG("gc_clean: MOVE_DATA wrote page "_SPIPRIpg" to objix entry "_SPIPRIsp" in mem\n", new_data_pix, (spiffs_span_ix)SPIFFS_OBJ_IX_ENTRY(fs, p_hdr.span_ix));
               }
             }
@@ -492,7 +492,7 @@ s32_t spiffs_gc_clean(spiffs *fs, spiffs_block_ix bix) {
               SPIFFS_GC_DBG("gc_clean: MOVE_OBJIX move objix "_SPIPRIid":"_SPIPRIsp" page "_SPIPRIpg" to "_SPIPRIpg"\n", obj_id, p_hdr.span_ix, cur_pix, new_pix);
               SPIFFS_CHECK_RES(res);
               spiffs_cb_object_event(fs, (spiffs_page_object_ix *)&p_hdr,
-                  SPIFFS_EV_IX_MOV, obj_id, p_hdr.span_ix, new_pix, 0);
+                                     SPIFFS_EV_IX_MOV, obj_id, SPIFFS_GET_SPAN_IX(p_hdr), new_pix, 0);
               // move wipes obj_lu, reload it
               res = _spiffs_rd(fs, SPIFFS_OP_T_OBJ_LU | SPIFFS_OP_C_READ,
                   0, bix * SPIFFS_CFG_LOG_BLOCK_SZ(fs) + SPIFFS_PAGE_TO_PADDR(fs, obj_lookup_page),
@@ -506,7 +506,7 @@ s32_t spiffs_gc_clean(spiffs *fs, spiffs_block_ix bix) {
               res = spiffs_page_delete(fs, cur_pix);
               if (res == SPIFFS_OK) {
                 spiffs_cb_object_event(fs, (spiffs_page_object_ix *)0,
-                    SPIFFS_EV_IX_DEL, obj_id, p_hdr.span_ix, cur_pix, 0);
+                                       SPIFFS_EV_IX_DEL, obj_id, SPIFFS_GET_SPAN_IX(p_hdr), cur_pix, 0);
               }
             }
             SPIFFS_CHECK_RES(res);
@@ -536,7 +536,7 @@ s32_t spiffs_gc_clean(spiffs *fs, spiffs_block_ix bix) {
         res = _spiffs_rd(fs, SPIFFS_OP_T_OBJ_LU2 | SPIFFS_OP_C_READ,
             0, SPIFFS_PAGE_TO_PADDR(fs, cur_pix), sizeof(spiffs_page_header), (u8_t*)&p_hdr);
         SPIFFS_CHECK_RES(res);
-        gc.cur_objix_spix = SPIFFS_OBJ_IX_ENTRY_SPAN_IX(fs, p_hdr.span_ix);
+        gc.cur_objix_spix = SPIFFS_OBJ_IX_ENTRY_SPAN_IX(fs, SPIFFS_GET_SPAN_IX(p_hdr));
         SPIFFS_GC_DBG("gc_clean: FIND_DATA find objix span_ix:"_SPIPRIsp"\n", gc.cur_objix_spix);
         res = spiffs_obj_lu_find_id_and_span(fs, gc.cur_obj_id | SPIFFS_OBJ_ID_IX_FLAG, gc.cur_objix_spix, 0, &objix_pix);
         if (res == SPIFFS_ERR_NOT_FOUND) {
@@ -584,7 +584,7 @@ s32_t spiffs_gc_clean(spiffs *fs, spiffs_block_ix bix) {
         SPIFFS_GC_DBG("gc_clean: MOVE_DATA store modified objix page, "_SPIPRIpg":"_SPIPRIsp"\n", new_objix_pix, objix->p_hdr.span_ix);
         SPIFFS_CHECK_RES(res);
         spiffs_cb_object_event(fs, (spiffs_page_object_ix *)fs->work,
-            SPIFFS_EV_IX_UPD, gc.cur_obj_id, objix->p_hdr.span_ix, new_objix_pix, 0);
+                               SPIFFS_EV_IX_UPD, gc.cur_obj_id, SPIFFS_GET_SPAN_IX(objix->p_hdr), new_objix_pix, 0);
       }
     }
     break;
