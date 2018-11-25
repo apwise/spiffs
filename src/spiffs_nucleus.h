@@ -158,12 +158,18 @@
 
 
 #if SPIFFS_USE_MAGIC
+#if (H16)
+#define SPIFFS_MAGIC_ORDER(m) spiffs_word_swap_bytes(m)
+#else
+#define SPIFFS_MAGIC_ORDER(m) (m)
+#endif
 #if !SPIFFS_USE_MAGIC_LENGTH
 #define SPIFFS_MAGIC(fs, bix)           \
-  ((spiffs_obj_id)(0x20140529 ^ SPIFFS_CFG_LOG_PAGE_SZ(fs)))
+  SPIFFS_MAGIC_ORDER((spiffs_obj_id)(0x20140529 ^ SPIFFS_CFG_LOG_PAGE_SZ(fs)))
 #else // SPIFFS_USE_MAGIC_LENGTH
-#define SPIFFS_MAGIC(fs, bix)           \
-  ((spiffs_obj_id)(0x20140529 ^ SPIFFS_CFG_LOG_PAGE_SZ(fs) ^ ((fs)->block_count - (bix))))
+#define SPIFFS_MAGIC(fs, bix)                                           \
+  SPIFFS_MAGIC_ORDER((spiffs_obj_id)(0x20140529 ^ SPIFFS_CFG_LOG_PAGE_SZ(fs) ^ \
+                                     ((fs)->block_count - (bix))))
 #endif // SPIFFS_USE_MAGIC_LENGTH
 #endif // SPIFFS_USE_MAGIC
 
@@ -493,7 +499,6 @@ typedef struct SPIFFS_PACKED {
 } spiffs_page_header;
 
 #if (H16)
-static inline u16_t spiffs_word_swap_bytes(u16_t w) { return (w >> 8) | (w << 8); }
 #define SPIFFS_GET_OBJ_ID(ph) spiffs_word_swap_bytes((ph).obj_id)
 #define SPIFFS_PUT_OBJ_ID(ph,id) (ph).obj_id = spiffs_word_swap_bytes(id)
 #define SPIFFS_GET_SPAN_IX(ph) spiffs_word_swap_bytes((ph).span_ix)
@@ -512,6 +517,7 @@ typedef struct SPIFFS_PACKED
 #if SPIFFS_ALIGNED_OBJECT_INDEX_TABLES
                 __attribute(( aligned(sizeof(spiffs_page_ix)) ))
 #endif
+spiffs_page_object_ix_header_s
 {
   // common page header
   spiffs_page_header p_hdr;
@@ -540,17 +546,12 @@ typedef struct SPIFFS_PACKED
 } spiffs_page_object_ix_header;
 
 #if (H16)
-// 31 30 29 28 27 26 25 24 | 23 22 21 20 19 18 17 16 | 15 14 13 12 11 10 09 08 | 07 06 05 04 03 02 01 00
-// 31 30 29 28 27 26 25 24 | 23 22 21 20 19 18 17 16 | 00 15 14 13 12 11 10 09 | 08 07 06 05 04 03 02 01
-// 08 07 06 05 04 03 02 01 | 00 15 14 12 12 11 10 09 | 23 22 21 20 19 18 17 16 | 31 30 29 28 27 26 25 24
-static inline u32_t spiffs_long_to_dbl(u32_t w) { return (w >> 24) | ((w >> 8) & 0x0000ff00) | ((w & 0x0000fe00) << 7) | (w << 23); }
-static inline u32_t spiffs_dbl_to_long(u32_t w) { return (w >> 23) | ((w >> 7) & 0x0000fe00) | ((w & 0x0000ff00) << 8) | (w << 24); }
 #define SPIFFS_SET_ALIGN1(poixh) (poixh)._align1 = 0xff
 #define SPIFFS_GET_SIZE(poixh) spiffs_dbl_to_long((poixh).size)
 #define SPIFFS_PUT_SIZE(poixh,sz) (poixh).size = spiffs_long_to_dbl(sz)
-#define SPIFFS_GET_NAME(poixh,nm) strncpy((char *)(nm), (const char *)(poixh).name, SPIFFS_OBJ_NAME_LEN)
-#define SPIFFS_PUT_NAME(poixh,nm) strncpy((char *)(poixh).name, (const char *) (nm), SPIFFS_OBJ_NAME_LEN)
-#define SPIFFS_CMP_NAME(poixh,nm) (strncmp((const char *)(poixh).name, (const char *) (nm), SPIFFS_OBJ_NAME_LEN) == 0)
+#define SPIFFS_GET_NAME(poixh,nm) spiffs_h16_get_name(&poixh,nm)
+#define SPIFFS_PUT_NAME(poixh,nm) spiffs_h16_put_name(&poixh,nm)
+#define SPIFFS_CMP_NAME(poixh,nm) spiffs_h16_cmp_name(&poixh,nm)
 #else
 #define SPIFFS_SET_ALIGN1(poixh)
 #define SPIFFS_GET_SIZE(poixh) (poixh).size

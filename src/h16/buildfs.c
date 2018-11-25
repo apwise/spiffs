@@ -6,6 +6,7 @@
 #include <libgen.h>
 #include <string.h>
 #include <dirent.h>
+#include <stdint.h>
 
 #include "spiffs.h"
 

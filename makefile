@@ -50,6 +50,7 @@ endif
 include files.mk
 SRC_DIRS = ./${sourcedir}
 ifeq (1, $(strip $(H16)))
+CFILES += spiffs_h16_conv.c
 CFLAGS += -DH16=1
 SRC_DIRS += ./${sourcedir}/h16
 CFILES_UTIL = buildfs.c

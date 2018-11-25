@@ -372,6 +372,6 @@ typedef u16_t spiffs_obj_id;
 // i.e. (spiffs_file_system_size / log_page_size) - 1
 typedef u16_t spiffs_span_ix;
 
-#include "spiffs_h16_types.h"
+#include "spiffs_h16_conv.h"
 
 #endif /* SPIFFS_CONFIG_H_ */
