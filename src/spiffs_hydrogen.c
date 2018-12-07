@@ -727,7 +727,7 @@ s32_t SPIFFS_fremove(spiffs *fs, spiffs_file fh) {
 static s32_t spiffs_stat_pix(spiffs *fs, spiffs_page_ix pix, spiffs_file fh, spiffs_stat *s) {
   (void)fh;
   spiffs_page_object_ix_header objix_hdr;
-  spiffs_obj_id obj_id;
+  spiffs_obj_id obj_id, flash_obj_id;
   s32_t res =_spiffs_rd(fs,  SPIFFS_OP_T_OBJ_IX | SPIFFS_OP_C_READ, fh,
       SPIFFS_PAGE_TO_PADDR(fs, pix), sizeof(spiffs_page_object_ix_header), (u8_t *)&objix_hdr);
   SPIFFS_API_CHECK_RES(fs, res);
@@ -735,7 +735,8 @@ static s32_t spiffs_stat_pix(spiffs *fs, spiffs_page_ix pix, spiffs_file fh, spi
   u32_t obj_id_addr = SPIFFS_BLOCK_TO_PADDR(fs, SPIFFS_BLOCK_FOR_PAGE(fs , pix)) +
       SPIFFS_OBJ_LOOKUP_ENTRY_FOR_PAGE(fs, pix) * sizeof(spiffs_obj_id);
   res =_spiffs_rd(fs,  SPIFFS_OP_T_OBJ_LU | SPIFFS_OP_C_READ, fh,
-      obj_id_addr, sizeof(spiffs_obj_id), (u8_t *)&obj_id);
+      obj_id_addr, sizeof(spiffs_obj_id), (u8_t *)&flash_obj_id);
+  obj_id = SPIFFS_OBJ_ID_FROM_FLASH(flash_obj_id);
   SPIFFS_API_CHECK_RES(fs, res);
 
   s->obj_id = obj_id & ~SPIFFS_OBJ_ID_IX_FLAG;
@@ -1398,7 +1399,7 @@ s32_t SPIFFS_vis(spiffs *fs) {
       // check each entry
       while (res == SPIFFS_OK &&
           cur_entry - entry_offset < entries_per_page && cur_entry < (int)(SPIFFS_PAGES_PER_BLOCK(fs)-SPIFFS_OBJ_LOOKUP_PAGES(fs))) {
-        spiffs_obj_id obj_id = obj_lu_buf[cur_entry-entry_offset];
+        spiffs_obj_id obj_id = SPIFFS_OBJ_ID_FROM_FLASH(obj_lu_buf[cur_entry-entry_offset]);
         if (cur_entry == 0) {
           spiffs_printf(_SPIPRIbl" ", bix);
         } else if ((cur_entry & 0x3f) == 0) {
@@ -1421,10 +1422,11 @@ s32_t SPIFFS_vis(spiffs *fs) {
       obj_lookup_page++;
     } // per object lookup page
 
-    spiffs_obj_id erase_count;
+    spiffs_obj_id erase_count, flash_erase_count;
     res = _spiffs_rd(fs, SPIFFS_OP_C_READ | SPIFFS_OP_T_OBJ_LU2, 0,
-        SPIFFS_ERASE_COUNT_PADDR(fs, bix),
-        sizeof(spiffs_obj_id), (u8_t *)&erase_count);
+                     SPIFFS_ERASE_COUNT_PADDR(fs, bix),
+                     sizeof(spiffs_obj_id), (u8_t *)&flash_erase_count);
+    erase_count = SPIFFS_OBJ_ID_FROM_FLASH(flash_erase_count);
     SPIFFS_CHECK_RES(res);
 
     if (erase_count != (spiffs_obj_id)-1) {

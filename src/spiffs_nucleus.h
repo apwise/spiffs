@@ -157,19 +157,26 @@
 
 
 
-#if SPIFFS_USE_MAGIC
 #if (H16)
-#define SPIFFS_MAGIC_ORDER(m) spiffs_word_swap_bytes(m)
+#define SPIFFS_OBJ_ID_TO_FLASH(oi) spiffs_word_swap_bytes(oi)
+#define SPIFFS_OBJ_ID_FROM_FLASH(oi) spiffs_word_swap_bytes(oi)
+#define SPIFFS_PAGE_IX_TO_FLASH(oi) spiffs_word_swap_bytes(oi)
+#define SPIFFS_PAGE_IX_FROM_FLASH(oi) spiffs_word_swap_bytes(oi)
 #else
-#define SPIFFS_MAGIC_ORDER(m) (m)
+#define SPIFFS_OBJ_ID_TO_FLASH(oi) (oi)
+#define SPIFFS_OBJ_ID_FROM_FLASH(oi) (oi)
+#define SPIFFS_PAGE_IX_TO_FLASH(oi) (oi)
+#define SPIFFS_PAGE_IX_FROM_FLASH(oi) (oi)
 #endif
+
+#if SPIFFS_USE_MAGIC
 #if !SPIFFS_USE_MAGIC_LENGTH
-#define SPIFFS_MAGIC(fs, bix)           \
-  SPIFFS_MAGIC_ORDER((spiffs_obj_id)(0x20140529 ^ SPIFFS_CFG_LOG_PAGE_SZ(fs)))
+#define SPIFFS_MAGIC(fs, bix)                                           \
+  SPIFFS_OBJ_ID_TO_FLASH((spiffs_obj_id)(0x20140529 ^ SPIFFS_CFG_LOG_PAGE_SZ(fs)))
 #else // SPIFFS_USE_MAGIC_LENGTH
 #define SPIFFS_MAGIC(fs, bix)                                           \
-  SPIFFS_MAGIC_ORDER((spiffs_obj_id)(0x20140529 ^ SPIFFS_CFG_LOG_PAGE_SZ(fs) ^ \
-                                     ((fs)->block_count - (bix))))
+  SPIFFS_OBJ_ID_TO_FLASH((spiffs_obj_id)(0x20140529 ^ SPIFFS_CFG_LOG_PAGE_SZ(fs) ^ \
+                                         ((fs)->block_count - (bix))))
 #endif // SPIFFS_USE_MAGIC_LENGTH
 #endif // SPIFFS_USE_MAGIC
 
@@ -498,15 +505,13 @@ typedef struct SPIFFS_PACKED {
   u8_t flags;
 } spiffs_page_header;
 
+#define SPIFFS_GET_OBJ_ID(ph) SPIFFS_OBJ_ID_FROM_FLASH((ph).obj_id)
+#define SPIFFS_PUT_OBJ_ID(ph,id) (ph).obj_id = SPIFFS_OBJ_ID_TO_FLASH(id)
 #if (H16)
-#define SPIFFS_GET_OBJ_ID(ph) spiffs_word_swap_bytes((ph).obj_id)
-#define SPIFFS_PUT_OBJ_ID(ph,id) (ph).obj_id = spiffs_word_swap_bytes(id)
 #define SPIFFS_GET_SPAN_IX(ph) spiffs_word_swap_bytes((ph).span_ix)
 #define SPIFFS_PUT_SPAN_IX(ph,ix) (ph).span_ix = spiffs_word_swap_bytes(ix)
 #define SPIFFS_SET_ALIGN(ph) (ph)._align = 0xff
 #else
-#define SPIFFS_GET_OBJ_ID(ph) (ph).obj_id
-#define SPIFFS_PUT_OBJ_ID(ph,id) (ph).obj_id = (id)
 #define SPIFFS_GET_SPAN_IX(ph) (ph).span_ix
 #define SPIFFS_PUT_SPAN_IX(ph,ix) (ph).span_ix = (ix)
 #define SPIFFS_SET_ALIGN(ph)

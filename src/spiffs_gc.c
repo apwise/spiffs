@@ -61,7 +61,7 @@ s32_t spiffs_gc_quick(
       while (res == SPIFFS_OK &&
           cur_entry - entry_offset < entries_per_page &&
           cur_entry < (int)(SPIFFS_PAGES_PER_BLOCK(fs)-SPIFFS_OBJ_LOOKUP_PAGES(fs))) {
-        spiffs_obj_id obj_id = obj_lu_buf[cur_entry-entry_offset];
+        spiffs_obj_id obj_id = SPIFFS_OBJ_ID_FROM_FLASH(obj_lu_buf[cur_entry-entry_offset]);
         if (obj_id == SPIFFS_OBJ_ID_DELETED) {
           deleted_pages_in_block++;
         } else if (obj_id == SPIFFS_OBJ_ID_FREE) {
@@ -215,7 +215,7 @@ s32_t spiffs_gc_erase_page_stats(
     // check each entry
     while (res == SPIFFS_OK &&
         cur_entry - entry_offset < entries_per_page && cur_entry < (int)(SPIFFS_PAGES_PER_BLOCK(fs)-SPIFFS_OBJ_LOOKUP_PAGES(fs))) {
-      spiffs_obj_id obj_id = obj_lu_buf[cur_entry-entry_offset];
+      spiffs_obj_id obj_id = SPIFFS_OBJ_ID_FROM_FLASH(obj_lu_buf[cur_entry-entry_offset]);
       if (obj_id == SPIFFS_OBJ_ID_FREE) {
       } else if (obj_id == SPIFFS_OBJ_ID_DELETED) {
         dele++;
@@ -276,7 +276,7 @@ s32_t spiffs_gc_find_candidate(
       while (res == SPIFFS_OK &&
           cur_entry - entry_offset < entries_per_page &&
           cur_entry < (int)(SPIFFS_PAGES_PER_BLOCK(fs)-SPIFFS_OBJ_LOOKUP_PAGES(fs))) {
-        spiffs_obj_id obj_id = obj_lu_buf[cur_entry-entry_offset];
+        spiffs_obj_id obj_id = SPIFFS_OBJ_ID_FROM_FLASH(obj_lu_buf[cur_entry-entry_offset]);
         if (obj_id == SPIFFS_OBJ_ID_FREE) {
           // when a free entry is encountered, scan logic ensures that all following entries are free also
           res = 1; // kill object lu loop
@@ -296,10 +296,11 @@ s32_t spiffs_gc_find_candidate(
     // stoneage sort, but probably not so many blocks
     if (res == SPIFFS_OK /*&& deleted_pages_in_block > 0*/) {
       // read erase count
-      spiffs_obj_id erase_count;
+      spiffs_obj_id erase_count, flash_erase_count;
       res = _spiffs_rd(fs, SPIFFS_OP_C_READ | SPIFFS_OP_T_OBJ_LU2, 0,
           SPIFFS_ERASE_COUNT_PADDR(fs, cur_block),
-          sizeof(spiffs_obj_id), (u8_t *)&erase_count);
+          sizeof(spiffs_obj_id), (u8_t *)&flash_erase_count);
+      erase_count = SPIFFS_OBJ_ID_FROM_FLASH(flash_erase_count);
       SPIFFS_CHECK_RES(res);
 
       spiffs_obj_id erase_age;
@@ -413,7 +414,7 @@ s32_t spiffs_gc_clean(spiffs *fs, spiffs_block_ix bix) {
       // check each object lookup entry
       while (scan && res == SPIFFS_OK &&
           cur_entry - entry_offset < entries_per_page && cur_entry < (int)(SPIFFS_PAGES_PER_BLOCK(fs)-SPIFFS_OBJ_LOOKUP_PAGES(fs))) {
-        spiffs_obj_id obj_id = obj_lu_buf[cur_entry-entry_offset];
+        spiffs_obj_id obj_id = SPIFFS_OBJ_ID_FROM_FLASH(obj_lu_buf[cur_entry-entry_offset]);
         cur_pix = SPIFFS_OBJ_LOOKUP_ENTRY_TO_PIX(fs, bix, cur_entry);
 
         // act upon object id depending on gc state
@@ -465,11 +466,11 @@ s32_t spiffs_gc_clean(spiffs *fs, spiffs_block_ix bix) {
               // update memory representation of object index page with new data page
               if (gc.cur_objix_spix == 0) {
                 // update object index header page
-                ((spiffs_page_ix*)((u8_t *)objix_hdr + sizeof(spiffs_page_object_ix_header)))[SPIFFS_GET_SPAN_IX(p_hdr)] = new_data_pix;
+                ((spiffs_page_ix*)((u8_t *)objix_hdr + sizeof(spiffs_page_object_ix_header)))[SPIFFS_GET_SPAN_IX(p_hdr)] = SPIFFS_PAGE_IX_TO_FLASH(new_data_pix);
                 SPIFFS_GC_DBG("gc_clean: MOVE_DATA wrote page "_SPIPRIpg" to objix_hdr entry "_SPIPRIsp" in mem\n", new_data_pix, (spiffs_span_ix)SPIFFS_OBJ_IX_ENTRY(fs, p_hdr.span_ix));
               } else {
                 // update object index page
-                ((spiffs_page_ix*)((u8_t *)objix + sizeof(spiffs_page_object_ix)))[SPIFFS_OBJ_IX_ENTRY(fs, SPIFFS_GET_SPAN_IX(p_hdr))] = new_data_pix;
+                ((spiffs_page_ix*)((u8_t *)objix + sizeof(spiffs_page_object_ix)))[SPIFFS_OBJ_IX_ENTRY(fs, SPIFFS_GET_SPAN_IX(p_hdr))] = SPIFFS_PAGE_IX_TO_FLASH(new_data_pix);
                 SPIFFS_GC_DBG("gc_clean: MOVE_DATA wrote page "_SPIPRIpg" to objix entry "_SPIPRIsp" in mem\n", new_data_pix, (spiffs_span_ix)SPIFFS_OBJ_IX_ENTRY(fs, p_hdr.span_ix));
               }
             }

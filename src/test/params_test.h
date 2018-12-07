@@ -66,6 +66,11 @@ extern void test_unlock(struct spiffs_t *fs);
 #define SPIFFS_UNLOCK(fs) test_unlock(fs)
 #endif
 
+// Test without SINGLETON
+#ifndef SPIFFS_SINGLETON
+#define SPIFFS_SINGLETON 0
+#endif
+
 // dbg output
 #define SPIFFS_DBG(_f, ...) //printf("\x1b[32m" _f "\x1b[0m", ## __VA_ARGS__)
 #define SPIFFS_API_DBG(_f, ...) //printf("\n\x1b[1m\x1b[7m" _f "\x1b[0m", ## __VA_ARGS__)

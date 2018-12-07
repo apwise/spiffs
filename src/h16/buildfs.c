@@ -234,6 +234,8 @@ int main(int argc, char **argv)
   ret = dir_to_fs("tdir");
   if (ret == 0) {
     ret = write_fs("flash.img");
+  } else {
+    fprintf(stderr, "dir_to_fs() failed\n");
   }
 
   if (flash) {

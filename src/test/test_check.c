@@ -73,7 +73,7 @@ TEST(lu_check1) {
   TEST_CHECK(res >= 0);
 
   // reset lu entry to being erased, but keep page data
-  spiffs_obj_id obj_id = SPIFFS_OBJ_ID_DELETED;
+  spiffs_obj_id obj_id = SPIFFS_OBJ_ID_TO_FLASH(SPIFFS_OBJ_ID_DELETED);
   spiffs_block_ix bix = SPIFFS_BLOCK_FOR_PAGE(FS, pix);
   int entry = SPIFFS_OBJ_LOOKUP_ENTRY_FOR_PAGE(FS, pix);
   u32_t addr = SPIFFS_BLOCK_TO_PADDR(FS, bix) + entry*sizeof(spiffs_obj_id);
@@ -111,7 +111,7 @@ TEST(page_cons1) {
 
   // set object index entry 2 to a bad page
   u32_t addr = SPIFFS_PAGE_TO_PADDR(FS, pix) + sizeof(spiffs_page_object_ix_header) + 0 * sizeof(spiffs_page_ix);
-  spiffs_page_ix bad_pix_ref = 0x55;
+  spiffs_page_ix bad_pix_ref = SPIFFS_PAGE_IX_TO_FLASH(0x55);
   area_write(addr, (u8_t*)&bad_pix_ref, sizeof(spiffs_page_ix));
   area_write(addr + sizeof(spiffs_page_ix), (u8_t*)&bad_pix_ref, sizeof(spiffs_page_ix));
 
@@ -156,7 +156,7 @@ TEST(page_cons2) {
 
   // set object index entry 1+2 to a data page 0
   u32_t addr = SPIFFS_PAGE_TO_PADDR(FS, pix) + sizeof(spiffs_page_object_ix_header) + 1 * sizeof(spiffs_page_ix);
-  spiffs_page_ix bad_pix_ref = dpix;
+  spiffs_page_ix bad_pix_ref = SPIFFS_PAGE_IX_TO_FLASH(dpix);
   area_write(addr, (u8_t*)&bad_pix_ref, sizeof(spiffs_page_ix));
   area_write(addr+sizeof(spiffs_page_ix), (u8_t*)&bad_pix_ref, sizeof(spiffs_page_ix));
 
@@ -197,7 +197,7 @@ TEST(page_cons3) {
 
   // set object index entry 1+2 lookup page
   u32_t addr = SPIFFS_PAGE_TO_PADDR(FS, pix) + sizeof(spiffs_page_object_ix_header) + 1 * sizeof(spiffs_page_ix);
-  spiffs_page_ix bad_pix_ref = SPIFFS_PAGES_PER_BLOCK(FS) * (*FS.block_count - 2);
+  spiffs_page_ix bad_pix_ref = SPIFFS_PAGE_IX_TO_FLASH(SPIFFS_PAGES_PER_BLOCK(FS) * (*FS.block_count - 2));
   area_write(addr, (u8_t*)&bad_pix_ref, sizeof(spiffs_page_ix));
   area_write(addr+sizeof(spiffs_page_ix), (u8_t*)&bad_pix_ref, sizeof(spiffs_page_ix));
 
@@ -278,7 +278,7 @@ TEST(index_cons1) {
 
   printf("  deleting lu entry pix %04x\n", pix);
   // reset lu entry to being erased, but keep page data
-  spiffs_obj_id obj_id = SPIFFS_OBJ_ID_DELETED;
+  spiffs_obj_id obj_id = SPIFFS_OBJ_ID_TO_FLASH(SPIFFS_OBJ_ID_DELETED);
   spiffs_block_ix bix = SPIFFS_BLOCK_FOR_PAGE(FS, pix);
   int entry = SPIFFS_OBJ_LOOKUP_ENTRY_FOR_PAGE(FS, pix);
   u32_t addr = SPIFFS_BLOCK_TO_PADDR(FS, bix) + entry * sizeof(spiffs_obj_id);
@@ -318,7 +318,7 @@ TEST(index_cons2) {
   TEST_CHECK(res >= 0);
 
   printf("  writing lu entry for index page, ix %04x, as data page\n", pix);
-  spiffs_obj_id obj_id = 0x1234;
+  spiffs_obj_id obj_id = SPIFFS_OBJ_ID_TO_FLASH(0x1234);
   spiffs_block_ix bix = SPIFFS_BLOCK_FOR_PAGE(FS, pix);
   int entry = SPIFFS_OBJ_LOOKUP_ENTRY_FOR_PAGE(FS, pix);
   u32_t addr = SPIFFS_BLOCK_TO_PADDR(FS, bix) + entry * sizeof(spiffs_obj_id);
@@ -359,7 +359,7 @@ TEST(index_cons3) {
 
   printf("  setting lu entry pix %04x to another index page\n", pix);
   // reset lu entry to being erased, but keep page data
-  spiffs_obj_id obj_id = 1234 | SPIFFS_OBJ_ID_IX_FLAG;
+  spiffs_obj_id obj_id = SPIFFS_OBJ_ID_TO_FLASH(1234 | SPIFFS_OBJ_ID_IX_FLAG);
   spiffs_block_ix bix = SPIFFS_BLOCK_FOR_PAGE(FS, pix);
   int entry = SPIFFS_OBJ_LOOKUP_ENTRY_FOR_PAGE(FS, pix);
   u32_t addr = SPIFFS_BLOCK_TO_PADDR(FS, bix) + entry * sizeof(spiffs_obj_id);

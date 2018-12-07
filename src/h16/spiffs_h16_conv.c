@@ -9,11 +9,8 @@ void spiffs_h16_get_name(const spiffs_page_object_ix_header *p,       u8_t *nm)
     u8_t c = p->name[i];
     if (c == 0) {
       copying = false;
-      // c remains zero
-    } else {
-      c |= 0x80; // Forced-8 parity
     }
-    nm[i] = c;
+    nm[i] = c & 0x7f;
   }
 }
 
@@ -42,12 +39,15 @@ bool spiffs_h16_cmp_name(const spiffs_page_object_ix_header *p, const u8_t *nm)
   int i;
   bool comparing = true;
   for (i=0; ((i<SPIFFS_OBJ_NAME_LEN) && (comparing)); i++) {
-    if ((p->name[i] & 0x7f) != nm[i]) {
+    if ((p->name[i] & 0x7f) != (nm[i] & 0x7f)) {
       return false;
     }
-    if (!nm[i]) {
-      // Both characters are NUL (since they match)
+    if ((!p->name[i]) && (!nm[i])) {
+      // Both characters are NUL
       comparing = false;
+    } else if ((!p->name[i]) || (!nm[i])) {
+      // One is NUL but the other isn't (it must be 0x80)
+      return false;
     }
   }
   return true;

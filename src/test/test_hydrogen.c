@@ -1354,7 +1354,7 @@ TEST(bad_index_1) {
 
   // set object index entry 2 to a bad page, free
   u32_t addr = SPIFFS_PAGE_TO_PADDR(FS, pix) + sizeof(spiffs_page_object_ix_header) + 2 * sizeof(spiffs_page_ix);
-  spiffs_page_ix bad_pix_ref = (spiffs_page_ix)-1;
+  spiffs_page_ix bad_pix_ref = SPIFFS_PAGE_IX_TO_FLASH((spiffs_page_ix)-1);
   area_write(addr, (u8_t*)&bad_pix_ref, sizeof(spiffs_page_ix));
 
 #if SPIFFS_CACHE
@@ -1391,7 +1391,7 @@ TEST(bad_index_2) {
 
   // set object index entry 2 to a bad page, lu
   u32_t addr = SPIFFS_PAGE_TO_PADDR(FS, pix) + sizeof(spiffs_page_object_ix_header) + 2 * sizeof(spiffs_page_ix);
-  spiffs_page_ix bad_pix_ref = SPIFFS_OBJ_LOOKUP_PAGES(FS)-1;
+  spiffs_page_ix bad_pix_ref = SPIFFS_PAGE_IX_TO_FLASH(SPIFFS_OBJ_LOOKUP_PAGES(FS)-1);
   area_write(addr, (u8_t*)&bad_pix_ref, sizeof(spiffs_page_ix));
 
 #if SPIFFS_CACHE

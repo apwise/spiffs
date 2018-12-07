@@ -68,7 +68,10 @@ static s32_t spiffs_object_get_data_page_index_reference(
     addr += sizeof(spiffs_page_object_ix) + SPIFFS_OBJ_IX_ENTRY(fs, data_spix) * sizeof(spiffs_page_ix);
   }
 
-  res = _spiffs_rd(fs, SPIFFS_OP_T_OBJ_LU2 | SPIFFS_OP_C_READ, 0, addr, sizeof(spiffs_page_ix), (u8_t *)pix);
+  spiffs_page_ix flash_page_ix;
+  res = _spiffs_rd(fs, SPIFFS_OP_T_OBJ_LU2 | SPIFFS_OP_C_READ, 0, addr,
+                   sizeof(spiffs_page_ix), (u8_t *)&flash_page_ix);
+  *pix = SPIFFS_PAGE_IX_FROM_FLASH(flash_page_ix);
 
   return res;
 }
@@ -134,18 +137,19 @@ static s32_t spiffs_rewrite_index(spiffs *fs, spiffs_obj_id obj_id, spiffs_span_
 
   // rewrite in mem
   if (objix_spix == 0) {
-    ((spiffs_page_ix*)((u8_t *)fs->lu_work + sizeof(spiffs_page_object_ix_header)))[data_spix] = new_data_pix;
+    ((spiffs_page_ix*)((u8_t *)fs->lu_work + sizeof(spiffs_page_object_ix_header)))[data_spix] = SPIFFS_OBJ_ID_TO_FLASH(new_data_pix);
   } else {
-    ((spiffs_page_ix*)((u8_t *)fs->lu_work + sizeof(spiffs_page_object_ix)))[SPIFFS_OBJ_IX_ENTRY(fs, data_spix)] = new_data_pix;
+    ((spiffs_page_ix*)((u8_t *)fs->lu_work + sizeof(spiffs_page_object_ix)))[SPIFFS_OBJ_IX_ENTRY(fs, data_spix)] = SPIFFS_OBJ_ID_TO_FLASH(new_data_pix);
   }
 
   res = _spiffs_wr(fs, SPIFFS_OP_T_OBJ_DA | SPIFFS_OP_C_UPDT,
       0, SPIFFS_PAGE_TO_PADDR(fs, free_pix), SPIFFS_CFG_LOG_PAGE_SZ(fs), fs->lu_work);
   SPIFFS_CHECK_RES(res);
+  spiffs_obj_id flash_obj_id = SPIFFS_OBJ_ID_TO_FLASH(obj_id);
   res = _spiffs_wr(fs, SPIFFS_OP_T_OBJ_LU | SPIFFS_OP_C_UPDT,
       0, SPIFFS_BLOCK_TO_PADDR(fs, SPIFFS_BLOCK_FOR_PAGE(fs, free_pix)) + SPIFFS_OBJ_LOOKUP_ENTRY_FOR_PAGE(fs, free_pix) * sizeof(spiffs_page_ix),
       sizeof(spiffs_obj_id),
-      (u8_t *)&obj_id);
+      (u8_t *)&flash_obj_id);
   SPIFFS_CHECK_RES(res);
   res = spiffs_page_delete(fs, objix_pix);
 
@@ -330,7 +334,7 @@ static s32_t spiffs_lookup_check_validate(spiffs *fs, spiffs_obj_id lu_obj_id, s
               //   rewrite as obj_id_ph
               SPIFFS_PUT_OBJ_ID(new_ph, SPIFFS_GET_OBJ_ID(*p_hdr) | SPIFFS_OBJ_ID_IX_FLAG);
               res = spiffs_rewrite_page(fs, cur_pix, &new_ph, &new_pix);
-              SPIFFS_CHECK_DBG("LU: FIXUP: rewrite page "_SPIPRIpg" as "_SPIPRIid" to pix "_SPIPRIpg"\n", cur_pix, new_ph.obj_id, new_pix);
+              SPIFFS_CHECK_DBG("LU: FIXUP: rewrite page "_SPIPRIpg" as "_SPIPRIid" to pix "_SPIPRIpg"\n", cur_pix, SPIFFS_GET_OBJ_ID(new_ph), new_pix);
               CHECK_CB(fs, SPIFFS_CHECK_LOOKUP, SPIFFS_CHECK_FIX_LOOKUP, SPIFFS_GET_OBJ_ID(*p_hdr), SPIFFS_GET_SPAN_IX(*p_hdr));
               SPIFFS_CHECK_RES(res);
               *reload_lu = 1;
@@ -339,7 +343,7 @@ static s32_t spiffs_lookup_check_validate(spiffs *fs, spiffs_obj_id lu_obj_id, s
               //   got a data page for look up obj id
               //   rewrite as obj_id_lu
               SPIFFS_PUT_OBJ_ID(new_ph, lu_obj_id | SPIFFS_OBJ_ID_IX_FLAG);
-              SPIFFS_CHECK_DBG("LU: FIXUP: rewrite page "_SPIPRIpg" as "_SPIPRIid"\n", cur_pix, new_ph.obj_id);
+              SPIFFS_CHECK_DBG("LU: FIXUP: rewrite page "_SPIPRIpg" as "_SPIPRIid"\n", cur_pix, SPIFFS_GET_OBJ_ID(new_ph));
               CHECK_CB(fs, SPIFFS_CHECK_LOOKUP, SPIFFS_CHECK_FIX_LOOKUP, SPIFFS_GET_OBJ_ID(*p_hdr), SPIFFS_GET_SPAN_IX(*p_hdr));
               res = spiffs_rewrite_page(fs, cur_pix, &new_ph, &new_pix);
               SPIFFS_CHECK_RES(res);
@@ -600,7 +604,7 @@ static s32_t spiffs_page_consistency_check_i(spiffs *fs) {
 
           // for all entries in index
           for (i = 0; !restart && i < entries; i++) {
-            spiffs_page_ix rpix = object_page_index[i];
+            spiffs_page_ix rpix = SPIFFS_PAGE_IX_FROM_FLASH(object_page_index[i]);
             u8_t rpix_within_range = rpix >= pix_offset && rpix < pix_offset + pages_per_scan;
 
             if ((rpix != (spiffs_page_ix)-1 && rpix > SPIFFS_MAX_PAGES(fs))
@@ -660,8 +664,8 @@ static s32_t spiffs_page_consistency_check_i(spiffs *fs) {
                   (rp_hdr.flags & (SPIFFS_PH_FLAG_DELET | SPIFFS_PH_FLAG_INDEX | SPIFFS_PH_FLAG_USED)) !=
                       (SPIFFS_PH_FLAG_DELET | SPIFFS_PH_FLAG_INDEX)) {
                SPIFFS_CHECK_DBG("PA: pix "_SPIPRIpg" has inconsistent page header ix id/span:"_SPIPRIid"/"_SPIPRIsp", ref id/span:"_SPIPRIid"/"_SPIPRIsp" flags:"_SPIPRIfl"\n",
-                    rpix, p_hdr.obj_id & ~SPIFFS_OBJ_ID_IX_FLAG, data_spix_offset + i,
-                    rp_hdr.obj_id, rp_hdr.span_ix, rp_hdr.flags);
+                                rpix, SPIFFS_GET_OBJ_ID(p_hdr) & ~SPIFFS_OBJ_ID_IX_FLAG, data_spix_offset + i,
+                                SPIFFS_GET_OBJ_ID(rp_hdr), SPIFFS_GET_SPAN_IX(rp_hdr), rp_hdr.flags);
                // try finding correct page
                spiffs_page_ix data_pix;
                res = spiffs_obj_lu_find_id_and_span(fs, SPIFFS_GET_OBJ_ID(p_hdr) & ~SPIFFS_OBJ_ID_IX_FLAG,
@@ -673,7 +677,7 @@ static s32_t spiffs_page_consistency_check_i(spiffs *fs) {
                SPIFFS_CHECK_RES(res);
                if (data_pix == 0) {
                  // not found, this index is badly borked
-                 SPIFFS_CHECK_DBG("PA: FIXUP: index bad, delete object id "_SPIPRIid"\n", p_hdr.obj_id);
+                 SPIFFS_CHECK_DBG("PA: FIXUP: index bad, delete object id "_SPIPRIid"\n", SPIFFS_GET_OBJ_ID(p_hdr));
                  CHECK_CB(fs, SPIFFS_CHECK_PAGE, SPIFFS_CHECK_DELETE_BAD_FILE, SPIFFS_GET_OBJ_ID(p_hdr), 0);
                  res = spiffs_delete_obj_lazy(fs, SPIFFS_GET_OBJ_ID(p_hdr));
                  SPIFFS_CHECK_RES(res);
@@ -681,7 +685,7 @@ static s32_t spiffs_page_consistency_check_i(spiffs *fs) {
                } else {
                  // found it, so rewrite index
                  SPIFFS_CHECK_DBG("PA: FIXUP: found correct data pix "_SPIPRIpg", rewrite ix pix "_SPIPRIpg" id "_SPIPRIid"\n",
-                     data_pix, cur_pix, p_hdr.obj_id);
+                                  data_pix, cur_pix, SPIFFS_GET_OBJ_ID(p_hdr));
                  res = spiffs_rewrite_index(fs, SPIFFS_GET_OBJ_ID(p_hdr), data_spix_offset + i, data_pix, cur_pix);
                  if (res <= _SPIFFS_ERR_CHECK_FIRST && res > _SPIFFS_ERR_CHECK_LAST) {
                    // index bad also, cannot mend this file
@@ -706,7 +710,7 @@ static s32_t spiffs_page_consistency_check_i(spiffs *fs) {
                   // must be multiple files with same object id. Only solution is to delete
                   // the object which is referring to this page
                   SPIFFS_CHECK_DBG("PA: FIXUP: removing object "_SPIPRIid" and page "_SPIPRIpg"\n",
-                      p_hdr.obj_id, cur_pix);
+                                   SPIFFS_GET_OBJ_ID(p_hdr), cur_pix);
                   CHECK_CB(fs, SPIFFS_CHECK_PAGE, SPIFFS_CHECK_DELETE_BAD_FILE, SPIFFS_GET_OBJ_ID(p_hdr), 0);
                   res = spiffs_delete_obj_lazy(fs, SPIFFS_GET_OBJ_ID(p_hdr));
                   SPIFFS_CHECK_RES(res);
@@ -797,7 +801,7 @@ static s32_t spiffs_page_consistency_check_i(spiffs *fs) {
             if (rewrite_ix_to_this) {
               // if pointing to invalid page, redirect index to this page
               SPIFFS_CHECK_DBG("PA: FIXUP: rewrite index id "_SPIPRIid" data spix "_SPIPRIsp" to point to this pix: "_SPIPRIpg"\n",
-                  p_hdr.obj_id, p_hdr.span_ix, cur_pix);
+                               SPIFFS_GET_OBJ_ID(p_hdr), SPIFFS_GET_SPAN_IX(p_hdr), cur_pix);
               res = spiffs_rewrite_index(fs, SPIFFS_GET_OBJ_ID(p_hdr), SPIFFS_GET_SPAN_IX(p_hdr), cur_pix, objix_pix);
               if (res <= _SPIFFS_ERR_CHECK_FIRST && res > _SPIFFS_ERR_CHECK_LAST) {
                 // index bad also, cannot mend this file
@@ -918,7 +922,7 @@ static s32_t spiffs_object_index_consistency_check_v(spiffs *fs, spiffs_obj_id o
         (p_hdr.flags & (SPIFFS_PH_FLAG_INDEX | SPIFFS_PH_FLAG_FINAL | SPIFFS_PH_FLAG_DELET | SPIFFS_PH_FLAG_IXDELE)) ==
         (SPIFFS_PH_FLAG_DELET)) {
       SPIFFS_CHECK_DBG("IX: pix "_SPIPRIpg", obj id:"_SPIPRIid" spix:"_SPIPRIsp" header not fully deleted - deleting\n",
-          cur_pix, obj_id, p_hdr.span_ix);
+                       cur_pix, obj_id, SPIFFS_GET_SPAN_IX(p_hdr));
       CHECK_CB(fs, SPIFFS_CHECK_INDEX, SPIFFS_CHECK_DELETE_PAGE, cur_pix, obj_id);
       res = spiffs_page_delete(fs, cur_pix);
       SPIFFS_CHECK_RES(res);
@@ -974,7 +978,7 @@ static s32_t spiffs_object_index_consistency_check_v(spiffs *fs, spiffs_obj_id o
 
       if (delete) {
         SPIFFS_CHECK_DBG("IX: FIXUP: pix "_SPIPRIpg", obj id:"_SPIPRIid" spix:"_SPIPRIsp" is orphan index - deleting\n",
-            cur_pix, obj_id, p_hdr.span_ix);
+                         cur_pix, obj_id, SPIFFS_GET_SPAN_IX(p_hdr));
         CHECK_CB(fs, SPIFFS_CHECK_INDEX, SPIFFS_CHECK_DELETE_ORPHANED_INDEX, cur_pix, obj_id);
         res = spiffs_page_delete(fs, cur_pix);
         SPIFFS_CHECK_RES(res);

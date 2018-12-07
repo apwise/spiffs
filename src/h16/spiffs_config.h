@@ -94,7 +94,7 @@
 // Enables/disable memory read caching of nucleus file system operations.
 // If enabled, memory area must be provided for cache in SPIFFS_mount.
 #ifndef  SPIFFS_CACHE
-#define SPIFFS_CACHE                    0
+#define SPIFFS_CACHE                    1
 #endif
 #if SPIFFS_CACHE
 // Enables memory write caching for file descriptors in hydrogen
