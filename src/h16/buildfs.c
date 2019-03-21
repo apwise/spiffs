@@ -49,7 +49,11 @@ static int map_name_to_spiffs(const char *pathname,
   }
 
   for (i=0; i<len; i++) {
-    spiffs_name[i] = s[i];
+    char c = s[i];
+    if ((c>='a') && (c<='z')) {
+      c -= ('a'-'A');
+    }
+    spiffs_name[i] = c;
   }
 
   for (   ; i <= SPIFFS_OBJ_NAME_LEN; i++) {
